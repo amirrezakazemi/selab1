@@ -20,3 +20,17 @@ def train(model, device, train_loader, optimizer, epoch, loss_fn):
         loss = loss_fn(output, data.y.view(-1, 1).float().to(device))
         loss.backward()
         optimizer.step()
+
+
+def predicting(model, device, loader):
+    print('Prediction for {} samples...'.format(len(loader.dataset)))
+    model.eval()
+    total_preds = torch.Tensor()
+    total_labels = torch.Tensor()
+    with torch.no_grad():
+        for data in loader:
+            data = data.to(device)
+            output = model(data)
+            total_preds = torch.cat((total_preds, output.cpu()), 0)
+            total_labels = torch.cat((total_labels, data.y.view(-1, 1).cpu()), 0)
+    return total_labels.numpy().flatten(), total_preds.numpy().flatten()
