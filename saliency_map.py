@@ -80,3 +80,64 @@ def generate_guided_gc_saliency(model, input, target):
     return drug_ggc, torch.unsqueeze(target_ggc, 0)
 
 
+dataset = "davis"
+val_data = TestbedDataset(root='data', dataset=dataset + '_test')
+TEST_BATCH_SIZE = 512
+val_loader = DataLoader(val_data, batch_size=TEST_BATCH_SIZE, shuffle=False)
+model = GINConvNetClassification()
+model.load_state_dict(torch.load('model_davis_classification.pt'))
+for name, param in model.named_parameters():
+    param.requires_grad = False
+
+cuda_name = "cuda:0"
+device = torch.device(cuda_name if torch.cuda.is_available() else "cpu")
+model.to(device)
+model.eval()
+G, P = predicting(model, device, val_loader)
+one_hot_G, one_hot_P = np.where(G > 7, 1, 0), np.argmax(P, axis=1)
+jam = one_hot_G + one_hot_P
+index = (jam == 2).nonzero()
+
+print("number of true-identified pairs", index[0].shape)
+
+num_selected_words = {}
+methods = [generate_bp_saliency, generate_guided_bp_saliency, generate_guided_gc_saliency]
+for method in methods:
+    num_selected_words[method.__name__] = list()
+    cnt = 0
+    for i in index[0]:
+        input = val_data[int(i)]
+        input = input.to(device)
+        a, b = method(model, input, 1)
+        drug = torch.sum(abs(a), 1)
+        target = torch.sum(abs(b[0]), 1)
+        average_drug, average_target = torch.mean(drug), torch.mean(target)
+        std_drug, std_target = torch.std(drug), torch.std(target)
+        imp_drug = (drug > average_drug + std_drug).nonzero()
+        imp_target = (target > average_target + 2 * std_target).nonzero()
+        num_selected_words[method.__name__].append(imp_target.shape[0] + imp_drug.shape[0])
+        # input.target[0, imp_target] = 0
+        input.x[imp_drug, :] = 0
+        input.x = Variable(input.x, requires_grad=True)
+        input.requires_grad = True
+        model.zero_grad()
+        out = model(input)
+        out = np.argmax(out.cpu().detach().numpy())
+        if out == 0:
+            cnt += 1
+
+    print("number of changed outcomes by altering drug " + method.__name__, cnt)
+    fig = plt.figure()
+    plt.hist(np.array(num_selected_words[method.__name__]), 5)
+    fig.savefig('hist_' + method.__name__ + '.png')
+
+
+
+
+
+
+
+
+
+
+
