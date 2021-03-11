@@ -106,3 +106,73 @@ def seq_cat(prot, max_seq_len, seq_dict):
     for i, ch in enumerate(prot[:max_seq_len]):
         x[i] = seq_dict[ch]
     return x
+
+
+def csv_to_PytorchData():
+    seq_voc = "ABCDEFGHIKLMNOPQRSTUVWXYZ"
+    seq_dict = {v: (i + 1) for i, v in enumerate(seq_voc)}
+    seq_dict_len = len(seq_dict)
+    max_seq_len = 1000
+
+    compound_iso_smiles = []
+    for dt_name in ['kiba', 'davis']:
+        opts = ['train', 'val', 'test']
+        for opt in opts:
+            df = pd.read_csv('data/' + dt_name + '_' + opt + '.csv')
+            compound_iso_smiles += list(df['compound_iso_smiles'])
+    compound_iso_smiles = set(compound_iso_smiles)
+    smile_graph = {}
+    for smile in compound_iso_smiles:
+        g = smile_to_graph(smile)
+        smile_graph[smile] = g
+
+    datasets = ['davis', 'kiba']
+    for dataset in datasets:
+        processed_data_file_train = 'data/processed/' + dataset + '_train.pt'
+        processed_data_file_resampled_train = 'data/processed/' + dataset + '_resampled_train.pt'
+        processed_data_file_val = 'data/processed/' + dataset + '_val.pt'
+        processed_data_file_test = 'data/processed/' + dataset + '_test.pt'
+        if ((not os.path.isfile(processed_data_file_train)) or (not os.path.isfile(processed_data_file_test)) or (
+        not os.path.isfile(processed_data_file_val)) or (not os.path.isfile(processed_data_file_resampled_train))):
+            df = pd.read_csv('data/' + dataset + '_train.csv')
+            train_drugs, train_prots, train_Y = list(df['compound_iso_smiles']), list(df['target_sequence']), list(
+                df['affinity'])
+            XT = [seq_cat(t, max_seq_len, seq_dict) for t in train_prots]
+            train_drugs, train_prots, train_Y = np.asarray(train_drugs), np.asarray(XT), np.asarray(train_Y)
+
+            df = pd.read_csv('data/' + dataset + '_resampled_train.csv')
+            train_resampled_drugs, train_resampled_prots, train_resampled_Y = list(df['compound_iso_smiles']), list(
+                df['target_sequence']), list(df['affinity'])
+            XT = [seq_cat(t, max_seq_len, seq_dict) for t in train_resampled_prots]
+            train_resampled_drugs, train_resampled_prots, train_resampled_Y = np.asarray(
+                train_resampled_drugs), np.asarray(XT), np.asarray(train_resampled_Y)
+
+            df = pd.read_csv('data/' + dataset + '_val.csv')
+            val_drugs, val_prots, val_Y = list(df['compound_iso_smiles']), list(df['target_sequence']), list(
+                df['affinity'])
+            XT = [seq_cat(t, max_seq_len, seq_dict) for t in val_prots]
+            val_drugs, val_prots, val_Y = np.asarray(val_drugs), np.asarray(XT), np.asarray(val_Y)
+
+            df = pd.read_csv('data/' + dataset + '_test.csv')
+            test_drugs, test_prots, test_Y = list(df['compound_iso_smiles']), list(df['target_sequence']), list(
+                df['affinity'])
+            XT = [seq_cat(t, max_seq_len, seq_dict) for t in test_prots]
+            test_drugs, test_prots, test_Y = np.asarray(test_drugs), np.asarray(XT), np.asarray(test_Y)
+
+            train_data = TestbedDataset(root='data', dataset=dataset + '_train', xd=train_drugs, xt=train_prots,
+                                        y=train_Y, smile_graph=smile_graph)
+
+            train_resampled_data = TestbedDataset(root='data', dataset=dataset + '_resampled_train',
+                                                  xd=train_resampled_drugs, xt=train_resampled_prots,
+                                                  y=train_resampled_Y, smile_graph=smile_graph)
+
+            val_data = TestbedDataset(root='data', dataset=dataset + '_val', xd=val_drugs, xt=val_prots, y=val_Y,
+                                      smile_graph=smile_graph)
+
+            test_data = TestbedDataset(root='data', dataset=dataset + '_test', xd=test_drugs, xt=test_prots, y=test_Y,
+                                       smile_graph=smile_graph)
+            print(processed_data_file_train, ' and ', processed_data_file_test, ' have been created')
+        else:
+            print(processed_data_file_train, ' and ', processed_data_file_test, ' and ', processed_data_file_val,
+                  ' are already created')
+
