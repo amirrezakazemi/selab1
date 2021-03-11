@@ -60,3 +60,30 @@ def rawdata_to_csv():
       X_upsampled = pd.concat([major, minor_upsampled])
       X_upsampled.to_csv("data/"+dataset +'_resampled_train.csv')
 
+
+def one_of_k_encoding_unk(x, allowable_set):
+    if x not in allowable_set:
+        x = allowable_set[-1]
+    return list(map(lambda s: x == s, allowable_set))
+
+
+def smile_to_graph(smile):
+    mol = Chem.MolFromSmiles(smile)
+
+    c_size = mol.GetNumAtoms()
+
+    features = []
+    for atom in mol.GetAtoms():
+        feature = atom_features(atom)
+        features.append(feature / sum(feature))
+
+    edges = []
+    for bond in mol.GetBonds():
+        edges.append([bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()])
+    g = nx.Graph(edges).to_directed()
+    edge_index = []
+    for e1, e2 in g.edges:
+        edge_index.append([e1, e2])
+
+    return c_size, features, edge_index
+
